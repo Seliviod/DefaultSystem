@@ -1,11 +1,16 @@
-﻿using DataStockService.Infrastructure.Context;
+﻿using DataStockService.App.KafkaProducers;
+using DataStockService.Infrastructure.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace DataStockService.App.BackgroundJobs
 {
-    public class OutboxSender(ILogger<OutboxSender> logger, AppDbContext context) : BackgroundService
+    public class OutboxSender(
+        ILogger<OutboxSender> logger, 
+        AppDbContext context,
+        KafkaSimpleProducer kafkaSimpleProducer) 
+        : BackgroundService
     {
         private readonly TimeSpan _pollingInterval = TimeSpan.FromSeconds(5);
 
@@ -22,6 +27,12 @@ namespace DataStockService.App.BackgroundJobs
                         .Where(e => e.CreatedAt >= startDate && e.CreatedAt <= endDate)
                         .Where(e => e.Status == Core.Entities.OutboxEventStatus.New)
                         .ToListAsync();
+
+                    foreach(var eve in events )
+                    {
+                        await kafkaSimpleProducer.Send(eve.Topic, eve.Payload, stoppingToken);
+                    }
+
                 }
                 catch (Exception ex)
                 {

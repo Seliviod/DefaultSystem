@@ -1,5 +1,6 @@
-using Confluent.Kafka;
 using DataStockService.API.ServiceCollection;
+using DataStockService.App;
+using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -7,42 +8,16 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 
-
-builder.Services
-    .RegisterDatabase(builder.Configuration);
-
-builder.Services.AddSingleton<IProducer<string, string>>(serviceProvider =>
+builder.Services.AddMediatR(cfg =>
 {
-    var configuration = serviceProvider.GetRequiredService<IConfiguration>();
-
-    var producerConfig = new ProducerConfig
-    {
-        BootstrapServers = configuration["Kafka:BootstrapServers"] ?? "localhost:9092",
-        Acks = Acks.All,
-        EnableIdempotence = true,
-        MessageSendMaxRetries = 3,
-        RetryBackoffMs = 1000,
-        LingerMs = 5,
-        BatchSize = 16384
-    };
-
-    return new ProducerBuilder<string, string>(producerConfig)
-        .SetLogHandler((_, logMessage) =>
-        {
-            var logger = serviceProvider.GetService<ILogger<IProducer<string, string>>>();
-            var level = logMessage.Level switch
-            {
-                Confluent.Kafka.LogLevel.Error => LogLevel.Error,
-                Confluent.Kafka.LogLevel.Warning => LogLevel.Warning,
-                Confluent.Kafka.LogLevel.Info => LogLevel.Information,
-                Confluent.Kafka.LogLevel.Debug => LogLevel.Debug,
-                _ => LogLevel.Information
-            };
-            logger?.Log(level, "Kafka Producer: {Message}", logMessage.Message);
-        })
-        .Build();
+    cfg.RegisterServicesFromAssemblies(
+        Assembly.GetExecutingAssembly(),
+        typeof(AppAsemblyReference).Assembly
+    );
 });
-
+builder.Services
+    .RegisterDatabase(builder.Configuration)
+    .AddKafkaProducers(builder.Configuration);
 
 var app = builder.Build();
 
